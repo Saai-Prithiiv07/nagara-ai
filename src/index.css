@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-dark: #050907;
+    --bg-surface: #0a130f;
+    --bg-panel: rgba(10, 19, 15, 0.78);
+    --border-subtle: rgba(16, 185, 129, 0.14);
+    --emerald-primary: #10b981;
+    --emerald-glow: rgba(16, 185, 129, 0.35);
+  }
+
+  body {
+    background-color: #050907;
+    color: #e5ece8;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.01em;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    letter-spacing: -0.03em;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Glassmorphism & Surface Elevation */
+.glass-panel {
+  background: rgba(8, 17, 13, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.65), 0 0 1px 1px rgba(16, 185, 129, 0.05);
+}
+
+.glass-panel-elevated {
+  background: rgba(11, 24, 18, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.75), 0 0 35px -5px rgba(16, 185, 129, 0.15);
+}
+
+.glass-panel-interactive {
+  background: rgba(9, 19, 14, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.14);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-panel-interactive:hover {
+  background: rgba(13, 27, 20, 0.88);
+  border-color: rgba(52, 211, 153, 0.38);
+  box-shadow: 0 14px 34px -8px rgba(0, 0, 0, 0.7), 0 0 25px -4px rgba(16, 185, 129, 0.2);
+  transform: translateY(-2px);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 30px -4px rgba(16, 185, 129, 0.4);
+}
+
+.glow-subtle {
+  box-shadow: 0 0 18px -2px rgba(16, 185, 129, 0.25);
+}
+
+.text-gradient-emerald {
+  background: linear-gradient(135deg, #ffffff 10%, #6ee7b7 55%, #10b981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-amber {
+  background: linear-gradient(135deg, #ffffff 10%, #fcd34d 55%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Atmospheric Mist & Smoke Keyframes */
+@keyframes drift-slow {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-35px, -8px, 0) scale(1.04); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes drift-slow-reverse {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(45px, 6px, 0) scale(1.06); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes pulse-mist {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes tree-sway {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(1.8deg); }
+}
+
+@keyframes road-light-pulse {
+  0% { stroke-dashoffset: 120; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.smoke-layer-1 {
+  animation: drift-slow 32s ease-in-out infinite;
+}
+
+.smoke-layer-2 {
+  animation: drift-slow-reverse 42s ease-in-out infinite;
+}
+
+.smoke-layer-3 {
+  animation: pulse-mist 16s ease-in-out infinite;
+}
+
+.tree-swaying {
+  transform-origin: bottom center;
+  animation: tree-sway 6s ease-in-out infinite;
+}
+
+.road-pulse {
+  stroke-dasharray: 12, 18;
+  animation: road-light-pulse 4s linear infinite;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050907;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 197, 94, 0.25);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 197, 94, 0.55);
+}
+
+/* Custom Range Sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: #13241b;
+  height: 6px;
+  border-radius: 9999px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2px solid #ffffff;
+  margin-top: -6px;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]:focus::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.9);
+}
+
+input[type="range"].accent-purple-500::-webkit-slider-thumb {
+  background: #a855f7;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+}
+
+/* Leaflet Custom Styling Overrides for Dark GIS Aesthetics */
+.leaflet-container {
+  background: #060e0a !important;
+  font-family: inherit !important;
+  width: 100%;
+  height: 100%;
+}
+
+/* OpenStreetMap Dark Filter (Free, No API Key Required) */
+.map-osm .leaflet-tile {
+  filter: brightness(0.65) invert(1) contrast(2.6) hue-rotate(185deg) saturate(0.3) !important;
+}
+
+/* Esri Dark Canvas (Natively Dark, No API Key Required) */
+.map-esri .leaflet-tile {
+  filter: brightness(0.92) contrast(1.15) saturate(0.8) !important;
+}
+
+/* Tactical Vector Grid (Offline Twin, No External Tiles) */
+.map-tactical .leaflet-tile-pane {
+  display: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: rgba(8, 16, 12, 0.96) !important;
+  backdrop-filter: blur(14px) !important;
+  color: #e5ece8 !important;
+  border: 1px solid rgba(52, 211, 153, 0.35) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75) !important;
+}
+
+.leaflet-popup-tip {
+  background: #08100c !important;
+  border: 1px solid rgba(52, 211, 153, 0.35) !important;
+}
+
+/* Print Styles for Executive Report */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .glass-panel, .glass-panel-elevated {
+    background: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+}
