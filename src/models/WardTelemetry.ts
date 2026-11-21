@@ -2,19 +2,76 @@ import mongoose, { Schema, Document, model } from 'mongoose';
 
 /**
  * MongoDB / Mongoose Schema Modeling
- * -------------------------------------------------------------
+ * =============================================================
  * Concepts Demonstrated:
- * - Schema modeling (Mongo): Typed Schema definitions and Model compilation
- * - Embedding vs referencing relationships:
- *   * Embedding: HourlyReadingSchema embedded directly inside WardTelemetry document
- *   * Referencing: wardRef and operatorRef referencing separate collections by ObjectId
- * - Indexing for query performance (Mongo):
- *   * Compound index: { wardId: 1, createdAt: -1 }
- *   * Geospatial index: { location: '2dsphere' }
- *   * TTL index: { createdAt: 1 }, expireAfterSeconds: 2592000 (30 days)
+ * 1. Schema modeling (Mongo): Strongly-typed Mongoose Schemas & Models
+ * 2. Embedding vs referencing relationships:
+ *    - EMBEDDING (Subdocuments):
+ *      * HourlyReadingSchema is embedded directly inside WardTelemetry (`readings: [HourlyReadingSchema]`)
+ *      * Advantages: Single document atomicity, fast collocated reads, zero joins required
+ *      * Best for: 1-to-few bounded data like time-series sensor logs
+ *    - REFERENCING (Normalized ObjectId References):
+ *      * wardRef points to 'Ward' collection (`type: Schema.Types.ObjectId, ref: 'Ward'`)
+ *      * operatorRef points to 'User' collection (`type: Schema.Types.ObjectId, ref: 'User'`)
+ *      * Advantages: Prevents data duplication, unbounded array growth, and stale copies
+ *      * Dereferencing / Join: Executed via `.populate('wardRef').populate('operatorRef')`
+ * 3. Indexing for query performance (Mongo):
+ *    - Compound index: `{ wardId: 1, createdAt: -1 }`
+ *    - Geospatial index: `{ location: '2dsphere' }`
+ *    - TTL index: `{ createdAt: 1 }, expireAfterSeconds: 2592000 (30 days)`
+ *    - Metric index: `{ avgRiskIndex: -1 }`
  */
 
-// 1. EMBEDDED SUBDOCUMENT SCHEMA
+// =============================================================
+// 1. REFERENCED MODELS (Normalized Collections)
+// =============================================================
+
+export interface IWard extends Document {
+  wardNumber: number;
+  wardName: string;
+  zone: string;
+  areaSqKm: number;
+  population: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const WardSchema = new Schema<IWard>(
+  {
+    wardNumber: { type: Number, required: true, unique: true },
+    wardName: { type: String, required: true },
+    zone: { type: String, required: true },
+    areaSqKm: { type: Number, required: true },
+    population: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
+
+export const Ward = mongoose.models.Ward || model<IWard>('Ward', WardSchema);
+
+export interface IUser extends Document {
+  name: string;
+  email: string;
+  role: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const UserSchema = new Schema<IUser>(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    role: { type: String, default: 'operator' },
+  },
+  { timestamps: true }
+);
+
+export const User = mongoose.models.User || model<IUser>('User', UserSchema);
+
+// =============================================================
+// 2. EMBEDDED SUBDOCUMENT SCHEMA (Denormalized inside parent)
+// =============================================================
+
 export interface IHourlyReading {
   timestamp: Date;
   tempCelsius: number;
@@ -31,17 +88,25 @@ export const HourlyReadingSchema = new Schema<IHourlyReading>({
   rainGaugeMm: { type: Number, required: true, min: 0 },
 });
 
-// 2. ROOT TELEMETRY DOCUMENT WITH EMBEDDED & REFERENCED RELATIONSHIPS
+// =============================================================
+// 3. ROOT TELEMETRY DOCUMENT (Embedding vs Referencing)
+// =============================================================
+
 export interface IWardTelemetry extends Document {
   wardId: string;
-  operatorId?: string;
-  wardRef?: mongoose.Types.ObjectId; // REFERENCED RELATIONSHIP
-  operatorRef?: mongoose.Types.ObjectId; // REFERENCED RELATIONSHIP
+  
+  // REFERENCING RELATIONSHIPS: Stores foreign ObjectIds referencing separate collections
+  wardRef?: mongoose.Types.ObjectId | IWard;
+  operatorRef?: mongoose.Types.ObjectId | IUser;
+
   location: {
     type: 'Point';
     coordinates: [number, number];
   };
-  readings: IHourlyReading[]; // EMBEDDED RELATIONSHIP
+
+  // EMBEDDING RELATIONSHIP: Subdocument array stored directly within the parent document
+  readings: IHourlyReading[];
+
   avgRiskIndex: number;
   isFlaggedAlert: boolean;
   createdAt: Date;
@@ -51,22 +116,31 @@ export interface IWardTelemetry extends Document {
 export const WardTelemetrySchema = new Schema<IWardTelemetry>(
   {
     wardId: { type: String, required: true },
-    // REFERENCED RELATIONSHIP (Object ID reference)
+
+    // REFERENCING RELATIONSHIP (Object ID reference to Ward collection)
     wardRef: { type: Schema.Types.ObjectId, ref: 'Ward' },
+
+    // REFERENCING RELATIONSHIP (Object ID reference to User collection)
     operatorRef: { type: Schema.Types.ObjectId, ref: 'User' },
+
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },
       coordinates: { type: [Number], required: true },
     },
-    // EMBEDDED RELATIONSHIP (Array of embedded subdocuments)
+
+    // EMBEDDING RELATIONSHIP: Array of embedded subdocuments
     readings: [HourlyReadingSchema],
+
     avgRiskIndex: { type: Number, required: true, min: 0, max: 100 },
     isFlaggedAlert: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
-// 3. INDEXING FOR QUERY PERFORMANCE (MONGO)
+// =============================================================
+// 4. INDEXING FOR QUERY PERFORMANCE (MONGO)
+// =============================================================
+
 // Compound index for fast timeseries queries by ward
 WardTelemetrySchema.index({ wardId: 1, createdAt: -1 });
 
@@ -82,5 +156,71 @@ WardTelemetrySchema.index({ avgRiskIndex: -1 });
 export const WardTelemetry =
   mongoose.models.WardTelemetry ||
   model<IWardTelemetry>('WardTelemetry', WardTelemetrySchema);
+
+// =============================================================
+// 5. QUERY HELPERS: EMBEDDING VS REFERENCING RELATIONSHIPS
+// =============================================================
+
+/**
+ * Accesses EMBEDDED subdocuments directly from parent document.
+ * Requires NO join / populate — read is completely atomic and fast.
+ */
+export async function fetchWithEmbeddedSubdocuments(id: string) {
+  const telemetry = await WardTelemetry.findById(id);
+  // Embedded readings are immediately available in memory
+  return {
+    id: telemetry?._id,
+    wardId: telemetry?.wardId,
+    readingsCount: telemetry?.readings.length ?? 0,
+    readings: telemetry?.readings ?? [],
+  };
+}
+
+/**
+ * Pushes a new reading into the EMBEDDED subdocument array.
+ * Demonstrates atomic subdocument manipulation without foreign table updates.
+ */
+export async function addEmbeddedReading(id: string, reading: IHourlyReading) {
+  return await WardTelemetry.findByIdAndUpdate(
+    id,
+    { $push: { readings: reading } },
+    { new: true }
+  );
+}
+
+/**
+ * Resolves REFERENCED documents using Mongoose .populate().
+ * Traverses ObjectId foreign keys to pull the full Ward and User documents.
+ */
+export async function fetchWithReferencedPopulation(id: string) {
+  return await WardTelemetry.findById(id)
+    .populate('wardRef')
+    .populate('operatorRef')
+    .exec();
+}
+
+/**
+ * Demonstrates comparative differences between Embedding vs Referencing.
+ */
+export async function demonstrateEmbeddingVsReferencing(id: string) {
+  // 1. EMBEDDED: Read parent doc and access subdocuments directly
+  const embeddedResult = await fetchWithEmbeddedSubdocuments(id);
+
+  // 2. REFERENCED: Read parent doc and dereference foreign keys with .populate()
+  const referencedResult = await fetchWithReferencedPopulation(id);
+
+  return {
+    relationshipType: 'Embedding vs Referencing in MongoDB',
+    embedded: {
+      description: 'Embedded subdocuments (HourlyReadingSchema) stored inline',
+      readings: embeddedResult.readings,
+    },
+    referenced: {
+      description: 'Referenced collections (Ward & User) resolved via .populate()',
+      ward: (referencedResult as any)?.wardRef,
+      operator: (referencedResult as any)?.operatorRef,
+    },
+  };
+}
 
 export default WardTelemetry;

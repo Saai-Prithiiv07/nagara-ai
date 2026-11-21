@@ -9,6 +9,9 @@
     "test": "vitest run",
     "lint": "oxlint",
     "preview": "vite preview",
+    "build:ssr": "vite build --ssr src/entry-server.tsx --outDir dist/server",
+    "serve:ssr": "node server.js",
+    "ssr": "node server.js",
     "server": "node --loader ts-node/esm src/server/index.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HeroSection } from './components/HeroSection';
 import { Navigation, TabType } from './components/Navigation';
 import { OverviewDashboard } from './pages/OverviewDashboard';
-import { DigitalTwinMap } from './pages/DigitalTwinMap';
+const DigitalTwinMap = React.lazy(() =>
+  import('./pages/DigitalTwinMap').then((m) => ({ default: m.DigitalTwinMap }))
+);
 import { SustainabilityPlanner } from './pages/SustainabilityPlanner';
 import { ScenarioLab } from './pages/ScenarioLab';
 import { EquityAnalysis } from './pages/EquityAnalysis';
@@ -30,10 +32,12 @@ export function App() {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     // Client-side routing: initialize from URL hash if present
     try {
-      const hash = window.location.hash.replace('#/', '').replace('#', '') as TabType;
-      const validTabs: TabType[] = ['overview', 'map', 'planner', 'scenarios', 'equity', 'recommendations'];
-      if (validTabs.includes(hash)) {
-        return hash;
+      if (typeof window !== 'undefined' && window.location) {
+        const hash = window.location.hash.replace('#/', '').replace('#', '') as TabType;
+        const validTabs: TabType[] = ['overview', 'map', 'planner', 'scenarios', 'equity', 'recommendations'];
+        if (validTabs.includes(hash)) {
+          return hash;
+        }
       }
     } catch {
       // Fallback
@@ -76,32 +80,35 @@ export function App() {
   // Initialize Budget Config with localStorage persistence where available
   const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
     try {
-      const savedBudget = localStorage.getItem(STORAGE_KEY_BUDGET);
-      const savedEquity = localStorage.getItem(STORAGE_KEY_EQUITY);
-      return {
-        totalBudgetCr: savedBudget ? Number(savedBudget) : 25,
-        equityWeight: savedEquity ? Number(savedEquity) : 0.5,
-        activeInterventions: [
-          'urban-forest',
-          'green-roof',
-          'rainwater-harvest',
-          'drainage-sponge'
-        ],
-        riskFocus: 'balanced'
-      };
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        const savedBudget = localStorage.getItem(STORAGE_KEY_BUDGET);
+        const savedEquity = localStorage.getItem(STORAGE_KEY_EQUITY);
+        return {
+          totalBudgetCr: savedBudget ? Number(savedBudget) : 25,
+          equityWeight: savedEquity ? Number(savedEquity) : 0.5,
+          activeInterventions: [
+            'urban-forest',
+            'green-roof',
+            'rainwater-harvest',
+            'drainage-sponge'
+          ],
+          riskFocus: 'balanced'
+        };
+      }
     } catch {
-      return {
-        totalBudgetCr: 25,
-        equityWeight: 0.5,
-        activeInterventions: [
-          'urban-forest',
-          'green-roof',
-          'rainwater-harvest',
-          'drainage-sponge'
-        ],
-        riskFocus: 'balanced'
-      };
+      // Fallback
     }
+    return {
+      totalBudgetCr: 25,
+      equityWeight: 0.5,
+      activeInterventions: [
+        'urban-forest',
+        'green-roof',
+        'rainwater-harvest',
+        'drainage-sponge'
+      ],
+      riskFocus: 'balanced'
+    };
   });
 
   // Save changes to localStorage
@@ -257,13 +264,15 @@ export function App() {
                 exit={{ opacity: 0, y: -12 }}
                 transition={{ duration: 0.25 }}
               >
-                <DigitalTwinMap
-                  wards={NEIGHBOURHOODS}
-                  selectedWardId={selectedWardId}
-                  onSelectWard={setSelectedWardId}
-                  optimisationResult={optimisationResult}
-                  onPlanForWard={handleRunPlanner}
-                />
+                <React.Suspense fallback={<div className="p-8 text-center text-cyan-400 font-mono">Loading Geospatial Digital Twin Engine...</div>}>
+                  <DigitalTwinMap
+                    wards={NEIGHBOURHOODS}
+                    selectedWardId={selectedWardId}
+                    onSelectWard={setSelectedWardId}
+                    optimisationResult={optimisationResult}
+                    onPlanForWard={handleRunPlanner}
+                  />
+                </React.Suspense>
               </motion.div>
             )}
 
