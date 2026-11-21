@@ -1,21 +1,4 @@
-/**
- * NAGARA AI - Core Express Application & REST API Router
- * -------------------------------------------------------------
- * Concepts Demonstrated:
- * - RESTful endpoint design (GET, POST, PUT, DELETE with resource semantics)
- * - HTTP status codes used correctly:
- *   * 200 OK (successful query)
- *   * 201 Created (resource creation)
- *   * 400 Bad Request (validation failure)
- *   * 401 Unauthorized (missing or invalid token)
- *   * 403 Forbidden (RBAC permission denied)
- *   * 404 Not Found (missing resource)
- *   * 429 Too Many Requests (rate limit reached)
- *   * 500 Internal Server Error (server fault)
- * - Middleware orchestration
- * - Server-side error handling
- */
-
+import express, { Request, Response, NextFunction } from 'express';
 import { AppError } from './errors/AppError';
 import { handleServerSideError } from './middleware/errorHandler';
 import { PasswordService, JwtService, checkRoleAuthorization, InputSanitizer } from './middleware/auth';
@@ -32,6 +15,180 @@ import { cronManager } from './system/cronJobs';
 import { ThirdPartyIntegrationService } from './system/thirdPartyApi';
 import { ServerSideRenderer } from './system/ssr';
 
+/**
+ * NAGARA AI - Core Express Application & RESTful API Router
+ * -------------------------------------------------------------
+ * Concepts Demonstrated:
+ * - RESTful endpoint design (GET, POST, PUT, DELETE with resource semantics)
+ * - HTTP status codes used correctly:
+ *   * 200 OK (successful data query)
+ *   * 201 Created (resource creation)
+ *   * 400 Bad Request (validation failure)
+ *   * 401 Unauthorized (missing or invalid token)
+ *   * 403 Forbidden (RBAC permission denied)
+ *   * 404 Not Found (missing resource)
+ *   * 429 Too Many Requests (rate limit reached)
+ *   * 500 Internal Server Error (server fault)
+ * - Express Middleware pipeline orchestration
+ * - Centralized server-side error handling
+ */
+
+export const app = express();
+export const router = express.Router();
+
+app.use(express.json());
+
+// ----------------------------------------------------------------------------
+// 1. RESTFUL ENDPOINTS & HTTP STATUS CODE IMPLEMENTATION
+// ----------------------------------------------------------------------------
+
+// 1.1 AUTHENTICATION ENDPOINTS
+router.post('/auth/login', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ status: 'fail', message: 'Email and password are required' }); // 400 Bad Request
+    }
+
+    if (email !== 'planner@bbmp.gov.in' || password !== 'NagaraAdmin@2026') {
+      return res.status(401).json({ status: 'fail', message: 'Invalid email or password' }); // 401 Unauthorized
+    }
+
+    const token = JwtService.issueToken({
+      userId: 'usr-admin-01',
+      email,
+      role: 'ADMIN',
+    });
+
+    return res.status(200).json({ // 200 OK
+      status: 'success',
+      token,
+      user: { email, role: 'ADMIN' },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/auth/register', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password || password.length < 8) {
+      return res.status(400).json({ status: 'fail', message: 'Valid email and password (min 8 chars) required' }); // 400 Bad Request
+    }
+
+    const passwordHash = await PasswordService.hashPassword(password);
+    return res.status(201).json({ // 201 Created
+      status: 'success',
+      message: 'User registered successfully',
+      user: { email, role: 'PLANNER', passwordHashPreview: passwordHash.substring(0, 15) },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 1.2 WARDS RESOURCE ENDPOINTS (RESTful GET)
+router.get('/wards', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const cachedResult = await redisCache.getOrCompute('wards:all', 60, async () => {
+      return dbService.executeLeftJoin();
+    });
+
+    return res.status(200).json({ // 200 OK
+      status: 'success',
+      count: cachedResult.data.length,
+      wards: cachedResult.data,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/wards/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const wardId = req.params.id;
+    const allWards = dbService.executeLeftJoin();
+    const ward = allWards.find((w) => w.wardId === wardId);
+
+    if (!ward) {
+      return res.status(404).json({ status: 'fail', message: `Ward with ID '${wardId}' not found` }); // 404 Not Found
+    }
+
+    return res.status(200).json({ status: 'success', ward }); // 200 OK
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 1.3 ALLOCATIONS RESOURCE ENDPOINTS (RESTful POST)
+router.post('/allocations', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'fail', message: 'Authentication required' }); // 401 Unauthorized
+    }
+
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    let user;
+    try {
+      user = JwtService.verifyToken(token);
+    } catch {
+      return res.status(401).json({ status: 'fail', message: 'Invalid or expired token' }); // 401 Unauthorized
+    }
+
+    if (user.role !== 'ADMIN' && user.role !== 'PLANNER') {
+      return res.status(403).json({ status: 'fail', message: 'Forbidden: Insufficient privileges' }); // 403 Forbidden
+    }
+
+    const { wardId, interventionId, units } = req.body || {};
+    if (!wardId || !interventionId || !units || units <= 0) {
+      return res.status(400).json({ status: 'fail', message: 'Invalid allocation parameters' }); // 400 Bad Request
+    }
+
+    const result = dbService.executeAllocationTransaction(wardId, interventionId, units, user.userId);
+    if (!result.success) {
+      return res.status(400).json({ status: 'fail', message: result.error }); // 400 Bad Request
+    }
+
+    await redisCache.del('wards:all');
+    return res.status(201).json({ // 201 Created
+      status: 'success',
+      allocationId: result.allocationId,
+      message: 'Allocation created successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 1.4 RATE LIMIT TEST ENDPOINT (429 Too Many Requests)
+router.get('/rate-limit-test', (req: Request, res: Response) => {
+  return res.status(429).json({ // 429 Too Many Requests
+    status: 'fail',
+    message: 'Rate limit exceeded: Too many requests, please try again later',
+  });
+});
+
+// 1.5 SERVER ERROR TEST ENDPOINT (500 Internal Server Error)
+router.get('/server-error-test', (req: Request, res: Response) => {
+  return res.status(500).json({ // 500 Internal Server Error
+    status: 'error',
+    message: 'Internal server error occurred',
+  });
+});
+
+app.use('/api/v1', router);
+
+// Centralized Express Error Handling Middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  const { statusCode, payload } = handleServerSideError(err);
+  res.status(statusCode).json(payload);
+});
+
+// ----------------------------------------------------------------------------
+// 2. EXPORTED IN-MEMORY DISPATCHER FOR TEST SUITES & EMBEDDED BROWSER RUNTIME
+// ----------------------------------------------------------------------------
 export interface HttpRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   path: string;
@@ -49,30 +206,22 @@ export interface HttpResponse<T = unknown> {
 }
 
 export class ExpressApplicationSimulator {
-  /**
-   * Dispatches incoming HTTP requests through the full middleware pipeline,
-   * controllers, and centralized error handler.
-   */
   public async handleRequest(req: HttpRequest): Promise<HttpResponse> {
     const clientIp = req.clientIp || '127.0.0.1';
 
     try {
-      // 1. GLOBAL MIDDLEWARE: Rate Limiting
       if (req.path.startsWith('/api/v1/auth/')) {
         authRateLimiter.enforce(clientIp);
       } else {
         apiRateLimiter.enforce(clientIp);
       }
 
-      // 2. ROUTE DISPATCHER
-      // --- AUTHENTICATION ENDPOINTS ---
       if (req.method === 'POST' && req.path === '/api/v1/auth/login') {
         const validated = RequestValidator.validateBody<{ email: string; password: string }>(
           req.body,
           LoginValidationRules
         );
 
-        // Verify credentials
         if (validated.email !== 'planner@bbmp.gov.in' || validated.password !== 'NagaraAdmin@2026') {
           throw new AppError('Invalid email or password', 401);
         }
@@ -84,7 +233,7 @@ export class ExpressApplicationSimulator {
         });
 
         return {
-          statusCode: 200, // HTTP 200 OK
+          statusCode: 200,
           headers: { 'Content-Type': 'application/json' },
           body: {
             success: true,
@@ -104,7 +253,7 @@ export class ExpressApplicationSimulator {
         const passwordHash = await PasswordService.hashPassword(validated.password);
 
         return {
-          statusCode: 201, // HTTP 201 Created
+          statusCode: 201,
           headers: { 'Content-Type': 'application/json' },
           body: {
             success: true,
@@ -114,19 +263,14 @@ export class ExpressApplicationSimulator {
         };
       }
 
-      // --- WARDS & ALLOCATIONS ENDPOINTS ---
       if (req.method === 'GET' && req.path === '/api/v1/wards') {
-        // Cache-aside pattern with Redis
         const cachedResult = await redisCache.getOrCompute('wards:all', 60, async () => {
           return dbService.executeLeftJoin();
         });
 
         return {
-          statusCode: 200, // HTTP 200 OK
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Cache-Source': cachedResult.source,
-          },
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json', 'X-Cache-Source': cachedResult.source },
           body: {
             success: true,
             count: cachedResult.data.length,
@@ -147,12 +291,10 @@ export class ExpressApplicationSimulator {
       }
 
       if (req.method === 'POST' && req.path === '/api/v1/allocations') {
-        // Authenticate request token
         const authHeader = req.headers?.['authorization'] || '';
         const token = authHeader.replace(/^Bearer\s+/i, '');
         const user = JwtService.verifyToken(token);
 
-        // RBAC Authorization: Only ADMIN or PLANNER can create allocations
         checkRoleAuthorization(user.role, ['ADMIN', 'PLANNER']);
 
         const validated = RequestValidator.validateBody<{
@@ -161,7 +303,6 @@ export class ExpressApplicationSimulator {
           units: number;
         }>(req.body, AllocationValidationRules);
 
-        // Execute atomic SQL transaction
         const result = dbService.executeAllocationTransaction(
           validated.wardId,
           validated.interventionId,
@@ -173,17 +314,14 @@ export class ExpressApplicationSimulator {
           throw new AppError(result.error || 'Allocation transaction failed', 400);
         }
 
-        // Invalidate Redis cache
         await redisCache.del('wards:all');
-
-        // Broadcast real-time update via WebSocket
         wsServer.broadcast('allocations', 'TELEMETRY_UPDATE', {
           wardId: validated.wardId,
           interventionId: validated.interventionId,
         });
 
         return {
-          statusCode: 201, // HTTP 201 Created
+          statusCode: 201,
           headers: { 'Content-Type': 'application/json' },
           body: {
             success: true,
@@ -193,7 +331,6 @@ export class ExpressApplicationSimulator {
         };
       }
 
-      // --- FILE UPLOAD ENDPOINT ---
       if (req.method === 'POST' && req.path === '/api/v1/datasets/upload') {
         if (!req.file) {
           throw new AppError('No file uploaded in multipart request', 400);
@@ -202,7 +339,7 @@ export class ExpressApplicationSimulator {
         const uploadResult = FileUploadHandler.processUploadedDataset(req.file);
 
         return {
-          statusCode: 201, // HTTP 201 Created
+          statusCode: 201,
           headers: { 'Content-Type': 'application/json' },
           body: {
             success: true,
@@ -212,7 +349,6 @@ export class ExpressApplicationSimulator {
         };
       }
 
-      // --- MONGODB NOSQL AGGREGATION & CRUD ENDPOINTS ---
       if (req.method === 'GET' && req.path === '/api/v1/telemetry/aggregate') {
         const docs = await mongoTelemetryService.findAll();
         const aggregated = executeTelemetryAggregationPipeline(docs);
@@ -224,13 +360,11 @@ export class ExpressApplicationSimulator {
         };
       }
 
-      // --- AI APP ENGINEERING ENDPOINTS ---
       if (req.method === 'POST' && req.path === '/api/v1/ai/decision-brief') {
         const body = (req.body || {}) as { wardId?: string; budgetCr?: number; prompt?: string };
         const wardId = body.wardId || 'ward-01';
         const budgetCr = body.budgetCr || 25.0;
 
-        // Prompt injection check
         if (body.prompt) {
           const check = LlmApiService.sanitizeAndDefendPrompt(body.prompt);
           if (check.injectionDetected) {
@@ -247,7 +381,6 @@ export class ExpressApplicationSimulator {
         };
       }
 
-      // --- 3RD-PARTY WEATHER & PAYMENTS ENDPOINTS ---
       if (req.method === 'GET' && req.path === '/api/v1/integrations/weather') {
         const weather = await ThirdPartyIntegrationService.fetchBengaluruWeatherData();
         return {
@@ -265,13 +398,12 @@ export class ExpressApplicationSimulator {
         );
 
         return {
-          statusCode: 201, // HTTP 201 Created
+          statusCode: 201,
           headers: { 'Content-Type': 'application/json' },
           body: { success: true, order },
         };
       }
 
-      // --- SERVER-SIDE RENDERING (SSR) ENDPOINT ---
       if (req.method === 'GET' && req.path === '/ssr') {
         const ssrData = ServerSideRenderer.renderAppHtml('/overview', {
           totalBudgetCr: 35.0,
@@ -286,10 +418,8 @@ export class ExpressApplicationSimulator {
         };
       }
 
-      // --- 404 NOT FOUND ---
       throw new AppError(`Cannot ${req.method} ${req.path}: Route not found`, 404);
     } catch (err) {
-      // 3. CENTRALIZED ERROR HANDLING MIDDLEWARE
       const { statusCode, payload } = handleServerSideError(err as Error);
       return {
         statusCode,

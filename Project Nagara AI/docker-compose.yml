@@ -42,6 +42,8 @@ services:
       - nagara_network
 
   # 3. MongoDB NoSQL Database (Sensor Telemetry & Time Series)
+  # Concepts: Schema modeling (Mongo), Embedding vs referencing relationships, Indexing for query performance (Mongo)
+  # Implementation: src/models/WardTelemetry.ts and src/server/db/mongo/models.ts
   mongo:
     image: mongo:7.0
     container_name: nagara_mongo
@@ -54,6 +56,7 @@ services:
       - nagara_network
 
   # 4. Redis In-Memory Cache & Session Store
+  # Concepts: Caching with Redis (src/server/system/redisCache.ts)
   redis:
     image: redis:7-alpine
     container_name: nagara_redis

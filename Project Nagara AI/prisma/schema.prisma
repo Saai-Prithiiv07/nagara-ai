@@ -2,6 +2,8 @@
 // Database Provider: PostgreSQL
 // Concepts Demonstrated:
 // - Relational schema design with Primary Keys (PK) & Foreign Keys (FK)
+// - SQL JOINs: Multi-table relational joins (INNER JOIN, LEFT JOIN) via @relation directives
+// - Transactions: Atomic execution of multiple database updates via prisma.$transaction
 // - Referential integrity with ON DELETE CASCADE / RESTRICT
 // - Normalization (1NF, 2NF, 3NF)
 // - Indexing for query performance (composite indexes, unique indexes)
