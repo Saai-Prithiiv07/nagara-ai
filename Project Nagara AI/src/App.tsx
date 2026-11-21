@@ -9,8 +9,7 @@ import { ScenarioLab } from './pages/ScenarioLab';
 import { EquityAnalysis } from './pages/EquityAnalysis';
 import { Recommendations } from './pages/Recommendations';
 import { ReportModal } from './components/ReportModal';
-import { ApiDataDemo } from './components/ApiDataDemo';
-import { FormValidationSection } from './components/FormValidationSection';
+import { TechnicalShowcaseHub } from './components/TechnicalShowcaseHub';
 import { NEIGHBOURHOODS } from './data/neighbourhoods';
 import { SCENARIO_PRESETS } from './lib/scenarios/scenarioEngine';
 import { runOptimisationEngine } from './lib/optimisation/engine';
@@ -187,13 +186,13 @@ export function App() {
         ) : null}
 
         {/* Tabbed Interactive Workspace */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
           {/* Quick HUD bar if Hero is collapsed */}
           {!showHero && (
             <motion.div
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-7 p-3.5 rounded-2xl glass-panel border border-emerald-500/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+              className="mb-6 p-3.5 rounded-2xl glass-panel border border-emerald-500/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
             >
               <div className="flex items-center gap-2">
                 <button
@@ -227,8 +226,8 @@ export function App() {
             </motion.div>
           )}
 
-          {/* Real-time Backend Telemetry & REST API Demonstration */}
-          <ApiDataDemo />
+          {/* Elevated Technical Architecture & Live Systems Showcase Hub */}
+          <TechnicalShowcaseHub />
 
           {/* Tab Views with Animation */}
           <AnimatePresence mode="wait">
@@ -247,9 +246,6 @@ export function App() {
                   onNavigateToPlanner={handleRunPlanner}
                   totalBudgetCr={budgetConfig.totalBudgetCr}
                 />
-                <div className="mt-8">
-                  <FormValidationSection />
-                </div>
               </motion.div>
             )}
 
