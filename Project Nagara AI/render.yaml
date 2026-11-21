@@ -1,0 +1,31 @@
+services:
+  # Web Service for NAGARA AI Backend & Frontend
+  - type: web
+    name: nagara-ai-api
+    env: node
+    plan: standard
+    buildCommand: npm ci && npm run build
+    startCommand: node --loader ts-node/esm src/server/index.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nagara-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: nagara-redis
+          property: connectionString
+
+databases:
+  # Managed PostgreSQL Relational Database
+  - name: nagara-postgres
+    plan: starter
+    databaseName: nagara_db
+    user: nagara_admin

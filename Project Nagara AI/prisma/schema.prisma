@@ -1,0 +1,157 @@
+// Prisma Relational Schema for NAGARA AI Municipal Decision Platform
+// Database Provider: PostgreSQL
+// Concepts Demonstrated:
+// - Relational schema design with Primary Keys (PK) & Foreign Keys (FK)
+// - Referential integrity with ON DELETE CASCADE / RESTRICT
+// - Normalization (1NF, 2NF, 3NF)
+// - Indexing for query performance (composite indexes, unique indexes)
+// - One-to-Many, Many-to-Many, and One-to-One relationships
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  PLANNER
+  AUDITOR
+  VIEWER
+}
+
+enum AllocationStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// 1. User Entity (Authentication & Role-Based Access Control)
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  passwordHash  String
+  fullName      String
+  role          Role        @default(PLANNER)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relationships
+  allocations   Allocation[]
+  auditLogs     AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+// 2. Ward Entity (Bengaluru Municipal Geographic Boundary)
+model Ward {
+  id              String      @id // e.g. "ward-01"
+  name            String
+  zone            String      // e.g. "East Zone", "South Zone"
+  population      Int
+  areaKm2         Float
+  compositeRisk   Float       // 0 - 100
+  heatIslandRisk  Float       // 0 - 100
+  floodRisk       Float       // 0 - 100
+  waterStressRisk Float       // 0 - 100
+  greenCoverPct   Float       // 0 - 100
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relationships (1-to-many)
+  allocations     Allocation[]
+  sensorTelemetry SensorTelemetry[]
+
+  @@index([zone])
+  @@index([compositeRisk])
+  @@map("wards")
+}
+
+// 3. Intervention Entity (Nature-Based Solutions Catalog)
+model Intervention {
+  id             String       @id // e.g. "green-roof"
+  name           String
+  category       String       // e.g. "Cooling", "Stormwater"
+  unitCostCr     Float        // Unit cost in Indian Crores (₹ Cr)
+  maxCapacity    Int          // Spatial saturation limit per ward
+  coolingEffectC Float        // Degrees Celsius reduction
+  co2OffsetTons  Float        // Metric tons CO2 offset per unit
+  lifespanYears  Int
+  createdAt      DateTime     @default(now())
+
+  // Relationships
+  allocations    Allocation[]
+
+  @@index([category])
+  @@map("interventions")
+}
+
+// 4. Allocation Entity (Relational Junction with PK/FK Foreign Keys)
+model Allocation {
+  id             String           @id @default(uuid())
+  wardId         String           // FK referencing Ward
+  interventionId String           // FK referencing Intervention
+  userId         String           // FK referencing User who approved allocation
+  unitsAllocated Int
+  allocatedCost  Float            // In ₹ Cr
+  expectedRoi    Float
+  status         AllocationStatus @default(ACTIVE)
+  allocatedAt    DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Foreign Key Relations with Referential Actions
+  ward           Ward             @relation(fields: [wardId], references: [id], onDelete: Cascade)
+  intervention   Intervention     @relation(fields: [interventionId], references: [id], onDelete: Restrict)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Composite Indexes for Fast Query Performance (Filtering, Ordering, Grouping)
+  @@index([wardId, status])
+  @@index([interventionId])
+  @@index([allocatedAt])
+  @@map("allocations")
+}
+
+// 5. Sensor Telemetry Entity (Relational Telemetry Timeseries)
+model SensorTelemetry {
+  id             String       @id @default(uuid())
+  wardId         String       // FK referencing Ward
+  temperatureC   Float
+  airQualityAqi  Float
+  rainfallMm     Float
+  groundwaterM   Float
+  recordedAt     DateTime     @default(now())
+
+  ward           Ward         @relation(fields: [wardId], references: [id], onDelete: Cascade)
+
+  @@index([wardId, recordedAt])
+  @@map("sensor_telemetry")
+}
+
+// 6. Audit Log Entity (Security, Compliance & Transactions)
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String   // FK referencing User
+  action      String   // e.g. "OPTIMISATION_COMMITTED", "BUDGET_OVERRIDE"
+  detailsJson String   // Audit metadata payload
+  ipAddress   String?
+  timestamp   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@map("audit_logs")
+}

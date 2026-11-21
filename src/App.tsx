@@ -9,6 +9,8 @@ import { ScenarioLab } from './pages/ScenarioLab';
 import { EquityAnalysis } from './pages/EquityAnalysis';
 import { Recommendations } from './pages/Recommendations';
 import { ReportModal } from './components/ReportModal';
+import { ApiDataDemo } from './components/ApiDataDemo';
+import { FormValidationSection } from './components/FormValidationSection';
 import { NEIGHBOURHOODS } from './data/neighbourhoods';
 import { SCENARIO_PRESETS } from './lib/scenarios/scenarioEngine';
 import { runOptimisationEngine } from './lib/optimisation/engine';
@@ -18,7 +20,7 @@ import {
   ScenarioParams,
   OptimisationResult
 } from './types';
-import { ArrowUp, Sparkles, ChevronRight, Activity } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { AnimatedCounter } from './components/AnimatedCounter';
 
 const STORAGE_KEY_BUDGET = 'nagara_ai_budget_v1';
@@ -26,13 +28,51 @@ const STORAGE_KEY_EQUITY = 'nagara_ai_equity_v1';
 
 export function App() {
   const [showHero, setShowHero] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    // Client-side routing: initialize from URL hash if present
+    try {
+      const hash = window.location.hash.replace('#/', '').replace('#', '') as TabType;
+      const validTabs: TabType[] = ['overview', 'map', 'planner', 'scenarios', 'equity', 'recommendations'];
+      if (validTabs.includes(hash)) {
+        return hash;
+      }
+    } catch {
+      // Fallback
+    }
+    return 'overview';
+  });
+
   const [selectedWardId, setSelectedWardId] = useState<string | null>(null);
   const [currentScenario, setCurrentScenario] = useState<ScenarioPreset>('baseline');
   const [activeScenarioParams, setActiveScenarioParams] = useState<ScenarioParams>(
     SCENARIO_PRESETS.baseline
   );
   const [reportModalOpen, setReportModalOpen] = useState<boolean>(false);
+
+  // Client-Side Routing: Hash change listener and history sync
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#/', '').replace('#', '') as TabType;
+      const validTabs: TabType[] = ['overview', 'map', 'planner', 'scenarios', 'equity', 'recommendations'];
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash);
+        setShowHero(false);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Update URL hash when tab changes
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    try {
+      window.history.pushState(null, '', `#/${tab}`);
+    } catch {
+      // Ignore in restricted iframe
+    }
+  };
 
   // Initialize Budget Config with localStorage persistence where available
   const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
@@ -96,6 +136,7 @@ export function App() {
       riskFocus: 'balanced'
     });
     setSelectedWardId(null);
+    handleTabChange('overview');
   };
 
   const handleSelectScenarioPreset = (preset: ScenarioPreset) => {
@@ -106,7 +147,7 @@ export function App() {
   // Navigation handlers
   const handleExploreMap = (wardId?: string) => {
     setShowHero(false);
-    setActiveTab('map');
+    handleTabChange('map');
     if (wardId) {
       setSelectedWardId(wardId);
     }
@@ -115,7 +156,7 @@ export function App() {
 
   const handleRunPlanner = (wardId?: string) => {
     setShowHero(false);
-    setActiveTab('planner');
+    handleTabChange('planner');
     if (wardId) {
       setSelectedWardId(wardId);
     }
@@ -127,7 +168,7 @@ export function App() {
       {/* Top Sticky Header */}
       <Navigation
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         currentScenario={currentScenario}
         onResetToBaseline={handleResetToBaseline}
         totalBudgetCr={budgetConfig.totalBudgetCr}
@@ -186,6 +227,9 @@ export function App() {
             </motion.div>
           )}
 
+          {/* Real-time Backend Telemetry & REST API Demonstration */}
+          <ApiDataDemo />
+
           {/* Tab Views with Animation */}
           <AnimatePresence mode="wait">
             {activeTab === 'overview' && (
@@ -203,6 +247,9 @@ export function App() {
                   onNavigateToPlanner={handleRunPlanner}
                   totalBudgetCr={budgetConfig.totalBudgetCr}
                 />
+                <div className="mt-8">
+                  <FormValidationSection />
+                </div>
               </motion.div>
             )}
 
