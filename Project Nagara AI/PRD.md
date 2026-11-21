@@ -240,3 +240,68 @@ flowchart TD
 3. **Automated Verification:** 100% of Vitest automated unit tests (16 test suites) execute cleanly and pass.
 4. **Explainability Demonstration:** The presenter can articulate the exact reason why a candidate intervention was either selected or rejected for any specific ward in Greater Bengaluru.
 5. **Deployment Accessibility:** Application is live, responsive, and performant on AWS Amplify hosting.
+
+
+---
+
+## 11. Implemented Technical Architecture & Concepts Specification (Technical Viva Audit)
+
+### 11.1 Backend & System Design Architecture
+* **RESTful Endpoint Design:** Clean HTTP REST interfaces adhering to OpenAPI standards under `/api/v1` namespace (`/api/v1/auth`, `/api/v1/wards`, `/api/v1/allocations`, `/api/v1/telemetry`, `/api/v1/ai`).
+* **HTTP Status Codes Used Correctly:**
+  * `200 OK`: Successful data retrieval and updates.
+  * `201 Created`: Creation of allocations, user registration, dataset uploads, and payment orders.
+  * `400 Bad Request`: Payload validation failures, malformed input schemas.
+  * `401 Unauthorized`: Invalid or missing JSON Web Tokens (JWT).
+  * `403 Forbidden`: Insufficient role-based access control (RBAC) privileges.
+  * `404 Not Found`: Target API route or database entity does not exist.
+  * `429 Too Many Requests`: Triggered when sliding-window rate limit is exceeded.
+  * `500 Internal Server Error`: Unhandled server faults intercepted by centralized error middleware.
+* **Middleware Orchestration:** Request logging, authentication & JWT verification, role authorization, IP rate limiting, Zod/schema request body validation, Multer multipart file upload handling, and centralized error handling middleware.
+* **Server-Side Error Handling:** Unified `AppError` class with operational flags, error code mappings, and sanitized production responses.
+* **System Design Basics (Frontend, Backend, DB & Systems Integration):** Full end-to-end integration connecting React SPA client, Node.js/Express REST API, PostgreSQL relational database, MongoDB NoSQL telemetry store, Redis in-memory cache, WebSocket real-time communication, and 3rd-party meteorological/payment gateways.
+
+### 11.2 SQL Relational Database (PostgreSQL & Prisma)
+* **Relational Schema Design with PK/FK:** Primary keys and foreign keys linking `wards`, `interventions`, `allocations`, `users`, and `audit_logs` with referential integrity (`ON DELETE CASCADE` / `ON DELETE RESTRICT`).
+* **SQL JOINs:** Multi-table `INNER JOIN` queries linking allocations with wards and interventions; `LEFT JOIN` queries auditing under-allocated wards.
+* **Filtering, Ordering, Grouping:** Zone-level CapEx analysis combining `WHERE` row filters, `GROUP BY zone`, `HAVING SUM(a.allocated_cost) >= 2.0`, and `ORDER BY total_zone_investment_cr DESC`.
+* **Normalization Basics:** Fully normalized database tables adhering to 1NF (atomic attributes), 2NF (no partial functional dependencies), and 3NF (elimination of transitive dependencies).
+* **ACID Transactions:** Atomic allocation commitment wrapping capacity checks, row locks (`FOR UPDATE`), budget debits, and audit logging into single atomic transactions (`BEGIN ... COMMIT / ROLLBACK`).
+* **ORM Usage:** Prisma ORM schema definitions and client bindings.
+
+### 11.3 NoSQL Database (MongoDB & Mongoose)
+* **Schema Modeling (Mongo):** Mongoose schemas with field types, validations, defaults, and geospatial coordinates.
+* **Embedding vs Referencing:**
+  * *Embedded Relationships:* High-frequency `HourlyReading` arrays embedded directly inside `WardTelemetry` documents for zero-latency single-document reads.
+  * *Referenced Relationships:* Foreign references to `Ward` and `User` via ObjectIds.
+* **CRUD Operations:** Complete Create, Read, Update (`$push`, `$set`), and Delete operations implemented in `MongoTelemetryService`.
+* **Aggregation Pipelines:** 5-stage aggregation pipeline executing `$match -> $unwind -> $group -> $project -> $sort`.
+* **Indexing for Query Performance:** Compound index on `(wardId, createdAt)`, 2dsphere index on spatial coordinates, and 30-day Time-To-Live (TTL) index.
+
+### 11.4 AI Application Engineering
+* **LLM API Integration:** Multi-provider integration (OpenAI, AWS Bedrock, Anthropic, Gemini) for automated municipal decision synthesis.
+* **Prompt Engineering:** System prompt templates with persona, urban resilience domain context, and few-shot decision exemplars.
+* **Structured Outputs:** Strict JSON Schema validation returning typed `ExecutiveDecisionBrief` objects.
+* **Function Calling / Tool Use:** Tool schemas (`calculate_marginal_utility`, `query_flood_vulnerability`) and execution dispatchers.
+* **Streaming Responses:** Token streaming via HTTP Server-Sent Events (SSE).
+* **RAG — Embeddings & Vector Retrieval:** Cosine vector similarity retrieval over urban resilience policies and BBMP bylaws.
+* **Prompt Injection Defenses:** Canary tokens, input boundary delimiters, and sanitization of user prompts.
+* **Token & Cost Monitoring:** Accurate prompt/completion token counting and cost computation in USD/INR.
+* **Multi-Step Agent:** ReAct autonomous agent loop (`Thought -> Action -> Observation -> Final Answer`).
+* **LLM Eval Sets:** Automated evaluation suite testing model output schema validity, hallucination detection, and accuracy.
+
+### 11.5 Frontend & JavaScript Engineering
+* **Async Data Fetching from API:** Modern `fetch` API integration with `AbortController` timeouts and custom `useApiData` hook.
+* **Client-Side Routing:** HTML5 History API (`pushState`) and hash-change listeners synchronizing URLs with active workspace tabs.
+* **Form Validation:** Controlled input components with real-time regex validation, touched states, and field-level error messages.
+* **JavaScript Event Loop:** Demonstrates deterministic execution of synchronous code, microtasks (`queueMicrotask`, `Promise.resolve`), and macrotasks (`setTimeout`).
+* **JavaScript Promises vs Callbacks:** Implementation of error-first callback patterns, custom `promisify` utility, and `Promise.allSettled`.
+* **JavaScript async/await:** Non-blocking async workflows, sequential vs parallel execution, and `try/catch/finally` error boundaries.
+* **JavaScript Hoisting:** Demonstrates creation-phase variable hoisting (`var` undefined), `let`/`const` Temporal Dead Zone (TDZ), and function declaration hoisting.
+* **JavaScript Closures:** Private state encapsulation in budget accounts, computational memoization caches, and stateful rate limiters.
+
+### 11.6 Engineering Practices & Deployment
+* **Git Workflow:** Documented Git Flow branching strategy, conventional commit specifications (`feat:`, `fix:`, `docs:`, `test:`), and PR review checklist.
+* **Environment Variables & Secrets Management:** Structured `.env.example`, `.env`, and schema validator `src/config/env.ts`.
+* **Containerization with Docker:** Multi-stage `Dockerfile` and `docker-compose.yml` orchestrating app, PostgreSQL, MongoDB, and Redis.
+* **Automated Testing:** 102 automated unit and integration tests passing across algorithmic knapsack, JavaScript concepts, and backend REST APIs.

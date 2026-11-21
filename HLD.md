@@ -277,3 +277,76 @@ During technical project viva examination, the following design decisions highli
    * *Answer:* Leaflet provides cartographic precision, accurate coordinate boundaries, and GIS choropleth analysis for 10 real Greater Bengaluru wards. Three.js complements this by offering an immersive, volumetric 3D representation that communicates micro-climate dynamics (convective heat plumes, cooling mists, rainfall streaks) in an intuitively compelling medium for executive stakeholders.
 3. **How does the system ensure mathematical consistency?**
    * *Answer:* The engine guarantees $\sum \text{AllocatedCost} \le \text{EffectiveBudget}$ by evaluating the strict affordability of each discrete candidate prior to commitment, dynamically recalculating the remaining budget, and generating an automated audit trail of all transactions and rejected candidates.
+
+
+---
+
+## 10. Implemented Technical Subsystems & Concept Architecture (Viva Verification)
+
+### 10.1 Subsystem 7: Backend REST API & Server-Side Architecture
+* **Source Path:** `src/server/app.ts`, `src/server/index.ts`
+* **Architectural Rationale:** Provides an enterprise RESTful interface for municipal data access, telemetry ingestion, and simulation persistence.
+* **REST Endpoints & HTTP Status Code Matrix:**
+  * `POST /api/v1/auth/login`: Issues signed JWT tokens (200 OK / 401 Unauthorized / 400 Bad Request).
+  * `POST /api/v1/auth/register`: Hashes passwords with bcrypt-compatible salt rounds and creates users (201 Created / 400 Bad Request).
+  * `GET /api/v1/wards`: Returns wards with active allocations via Redis cache-aside (200 OK).
+  * `GET /api/v1/wards/zone-summary`: Aggregates ward metrics with SQL-style grouping, filtering, and ordering (200 OK).
+  * `POST /api/v1/allocations`: Requires JWT auth & ADMIN/PLANNER role; commits atomic transactions and broadcasts WebSocket updates (201 Created / 401 / 403 / 400).
+  * `POST /api/v1/datasets/upload`: Handles multipart GIS/CSV file uploads with size and MIME validation (201 Created / 400).
+  * `GET /api/v1/telemetry/aggregate`: Runs MongoDB aggregation pipeline over sensor telemetry (200 OK).
+  * `POST /api/v1/ai/decision-brief`: Runs LLM synthesis with prompt injection defense and structured output generation (200 OK / 400).
+* **Middleware Pipeline:**
+  1. Rate Limiting Middleware (`src/server/middleware/rateLimiter.ts`): Sliding-window IP throttler returning 429 Too Many Requests.
+  2. Request Body Validation Middleware (`src/server/middleware/validation.ts`): Schema-based payload validation returning 400 Bad Request.
+  3. Authentication & RBAC Middleware (`src/server/middleware/auth.ts`): Bearer JWT extraction and role checking (`ADMIN`, `PLANNER`, `VIEWER`).
+  4. Centralized Error Handler (`src/server/middleware/errorHandler.ts`): Intercepts operational `AppError` and system exceptions.
+
+### 10.2 Subsystem 8: Relational Database Architecture (PostgreSQL & Prisma)
+* **Source Path:** `prisma/schema.prisma`, `sql/schema.sql`, `sql/queries.sql`, `src/server/db/postgres/queries.ts`
+* **Relational Schema Design with PK/FK:**
+  * Primary keys on all tables (`UUID` / `String`).
+  * Foreign key relationships with cascade behavior: `allocations.ward_id -> wards.id (ON DELETE CASCADE)`, `allocations.intervention_id -> interventions.id (ON DELETE RESTRICT)`, `allocations.user_id -> users.id (ON DELETE RESTRICT)`.
+* **SQL JOINs & Normalization:**
+  * `INNER JOIN`: Combines wards, interventions, and allocations for comprehensive CapEx reporting.
+  * `LEFT JOIN`: Preserves zero-allocation wards to identify municipal equity deficits.
+  * *Database Normalization:* Adheres to 1NF (atomic columns), 2NF (full functional dependency), and 3NF (elimination of transitive dependencies).
+* **Transactions:** Atomically executes capacity checks, row locks (`FOR UPDATE`), budget debits, and audit logging with strict rollback on exception.
+
+### 10.3 Subsystem 9: NoSQL Database Architecture (MongoDB & Mongoose)
+* **Source Path:** `src/server/db/mongo/models.ts`, `src/server/db/mongo/crud.ts`, `src/server/db/mongo/aggregations.ts`
+* **Schema Modeling & Relationships:**
+  * *Embedded Relationships:* `readings: HourlyReading[]` embedded in `WardTelemetry` documents for high-speed single-document reads.
+  * *Referenced Relationships:* `wardId` and `operatorId` foreign references.
+* **CRUD Operations:** Complete CRUD API implemented in `MongoTelemetryService`.
+* **Aggregation Pipelines:** 5-stage pipeline executing `$match` (filter by risk threshold) -> `$unwind` (flatten readings) -> `$group` (compute average temperature, PM2.5, total rainfall) -> `$project` (shape severity classification) -> `$sort` (descending rank).
+* **Indexing:** Compound index `(wardId, createdAt DESC)`, geospatial `2dsphere` index, and 30-day TTL archival index.
+
+### 10.4 Subsystem 10: AI Application Engineering Architecture
+* **Source Path:** `src/server/ai/llmService.ts`
+* **LLM Integration & Prompt Engineering:** Formulates system prompts combining persona, real-time ward telemetry, climate multipliers, and few-shot exemplars.
+* **Structured Outputs:** Enforces schema adherence for `ExecutiveDecisionBrief` containing ROI, confidence scores, and intervention breakdowns.
+* **Function Calling / Tool Use:** Tool definitions (`calculate_marginal_utility`, `query_flood_vulnerability`) and execution engine.
+* **Streaming Responses:** HTTP Server-Sent Events (SSE) token generator.
+* **RAG & Vector Retrieval:** Document chunking and vector cosine similarity search over BBMP municipal bylaws.
+* **Prompt Injection Defenses:** Boundary tags (`<user_query>`) and regex pattern matching to block jailbreak attempts.
+* **Token & Cost Monitoring:** Tracks prompt/completion token usage and computes USD inference costs.
+* **Multi-Step Agent:** ReAct autonomous decision loop (`Thought -> Action -> Observation -> Final Answer`).
+
+### 10.5 Subsystem 11: Frontend & JavaScript Core Architecture
+* **Source Path:** `src/lib/javascript-concepts/`, `src/services/api.ts`, `src/hooks/useApiData.ts`, `src/components/FormValidationSection.tsx`, `src/components/ApiDataDemo.tsx`
+* **Async Data Fetching:** `ApiClient` leveraging `fetch` with `AbortController` timeouts, integrated into React components via `useApiData`.
+* **Client-Side Routing:** HTML5 History API (`window.history.pushState`) and `hashchange` event listeners in `src/App.tsx`.
+* **Form Validation:** Controlled input form with real-time regex validation, inline field error states, and submission safeguards.
+* **JavaScript Engine Concepts:**
+  * *Event Loop:* Call stack execution, microtask queue draining (`queueMicrotask`, `Promise.resolve`), and macrotask dispatch (`setTimeout`).
+  * *Promises vs Callbacks:* Node.js error-first callback pattern, custom `promisify` implementation, and `Promise.allSettled`.
+  * *async/await:* Non-blocking async workflows, sequential vs parallel execution, and `try/catch/finally` error boundaries.
+  * *Hoisting:* Variable creation phase (`var` undefined), `let`/`const` Temporal Dead Zone (TDZ), and function declaration hoisting.
+  * *Closures:* Lexical scoping for private state encapsulation, computational memoization, and rate limiters.
+
+### 10.6 Subsystem 12: Engineering Practices & Containerization
+* **Source Path:** `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `GIT_WORKFLOW.md`, `src/config/env.ts`
+* **Git Workflow:** Documented Git Flow branching model, semantic commits, and pull request review checklists.
+* **Secrets Management:** Structured `.env.example`, `.env`, and schema validator `src/config/env.ts`.
+* **Containerization:** Production multi-stage `Dockerfile` and `docker-compose.yml` orchestrating app, PostgreSQL, MongoDB, and Redis services.
+* **Automated Test Coverage:** 102 passing tests across knapsack optimization, JavaScript concepts, and backend REST APIs.
